@@ -609,8 +609,8 @@ theorem compileExpr_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWid
   | .bin op a b, d, s, hf, hR => by
       by_cases hc : op.isCompare = true
       · have hs := FBinop.isShift_of_isCompare hc
-        simp only [FExpr.fits, hs, Bool.false_eq_true, if_false, Bool.and_eq_true] at hf
-        simp only [compileExpr, hc, if_true, runBlockA_append]
+        simp only [FExpr.fits, hs, Bool.false_eq_true, ite_false, Bool.and_eq_true] at hf
+        simp only [compileExpr, hc, ite_true, runBlockA_append]
         obtain ⟨ha1, ha2⟩ := compileExpr_correct hL Γ a d s hf.1 hR
         obtain ⟨hb1, hb2⟩ := compileExpr_correct hL Γ b (d + 1) _ hf.2 (ha2.stateRel hR)
         obtain ⟨hc1, hc2⟩ := cmpTail_correct hL op hc d
@@ -622,8 +622,8 @@ theorem compileExpr_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWid
         by_cases hs : op.isShift = true
         · cases b with
           | lit n =>
-            simp only [FExpr.fits, hs, if_true, Bool.and_eq_true, decide_eq_true_eq] at hf
-            simp only [compileExpr, hc, hs, Bool.false_eq_true, if_false, if_true,
+            simp only [FExpr.fits, hs, ite_true, Bool.and_eq_true, decide_eq_true_eq] at hf
+            simp only [compileExpr, hc, hs, Bool.false_eq_true, ite_false, ite_true,
               runBlockA_append]
             obtain ⟨ha1, ha2⟩ := compileExpr_correct hL Γ a d s hf.2 hR
             obtain ⟨hc1, hc2⟩ := shiftTail_correct hL op hs n hf.1
@@ -635,8 +635,8 @@ theorem compileExpr_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWid
           | _ => simp [FExpr.fits, hs] at hf
         · simp only [Bool.not_eq_true] at hs
           have har := FBinop.isArith_of hc hs
-          simp only [FExpr.fits, hs, Bool.false_eq_true, if_false, Bool.and_eq_true] at hf
-          simp only [compileExpr, hc, hs, Bool.false_eq_true, if_false, runBlockA_append]
+          simp only [FExpr.fits, hs, Bool.false_eq_true, ite_false, Bool.and_eq_true] at hf
+          simp only [compileExpr, hc, hs, Bool.false_eq_true, ite_false, runBlockA_append]
           obtain ⟨ha1, ha2⟩ := compileExpr_correct hL Γ a d s hf.1 hR
           obtain ⟨hb1, hb2⟩ := compileExpr_correct hL Γ b (d + 1) _ hf.2 (ha2.stateRel hR)
           obtain ⟨hc1, hc2⟩ := arithTail_correct hL op har
@@ -845,7 +845,7 @@ theorem assignCode_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWidt
     intro n hx' hn
     subst hs3
     simp only [runBlockA_cons, runBlockA_nil, evalA_mov, evalA_cmp, evalA_cmovne]
-    simp only [tR, upd, hL.eq_iff, hx', hn, if_false]
+    simp only [tR, upd, hL.eq_iff, hx', hn, ite_false]
     exact f.1 n (fun j _ => hn j)
   have e3 : s3.mem = s2.mem := by
     subst hs3; rfl
@@ -920,14 +920,14 @@ theorem setCode_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWidth) 
   refine ⟨?_, ?_⟩
   · by_cases hin : b ∧ idx.toNat < (σ.bufs t).length
     · obtain ⟨rfl, hin⟩ := hin
-      rw [if_pos (by simp [hin])] at e1
+      rw [ite_eq_left (by simp [hin])] at e1
       exact hR3.store ht hin val fr e1
-    · rw [if_neg hin] at e1
+    · rw [ite_eq_right hin] at e1
       have h0 := hR3.storeSink val fr e1
       cases b
       · exact h0
       · have hle : (σ.bufs t).length ≤ idx.toNat := by simp at hin; omega
-        simp only [if_true, FStmt.exec, ← hidx, ← hval, List.set_eq_of_length_le hle,
+        simp only [ite_true, FStmt.exec, ← hidx, ← hval, List.set_eq_of_length_le hle,
           FState.setBuf_self]
         exact h0
   · intro n hn
@@ -1001,7 +1001,7 @@ theorem matchPrologue_spec {L : Layout} (hL : LayoutOK L) {k : Nat} {g : RegName
     simp [upd, hL.eq_iff, c1]
   · simp [upd, opv, hL.eq_iff, hg2, hg1]
   · intro n hn h1 h2
-    simp only [upd, opv, hL.eq_iff, h1, h2, if_false]
+    simp only [upd, opv, hL.eq_iff, h1, h2, ite_false]
     exact f.1 n (fun j _ => hn j)
 
 theorem RegName.ne_of_written {k : Nat} {n : RegName} (hn : n.written k = false) :
@@ -1081,12 +1081,12 @@ theorem compileStmt_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWid
         · have e1 : (true && (c.eval Γ σ != 0)) = false := by simp [hc]
           have e2 : (true && (c.eval Γ σ == 0)) = true := by simp [hc]
           rw [e1, e2] at r4
-          simp only [FStmt.exec, if_pos hc, if_true]
+          simp only [FStmt.exec, ite_eq_left hc, ite_true]
           simpa using r4
         · have e1 : (true && (c.eval Γ σ != 0)) = true := by simp; exact hc
           have e2 : (true && (c.eval Γ σ == 0)) = false := by simp; exact hc
           rw [e1, e2] at r4
-          simp only [FStmt.exec, if_neg hc, if_true]
+          simp only [FStmt.exec, ite_eq_right hc, ite_true]
           simpa using r4
   | .matchTag t arms dflt, k, g, σ, s, b, hf, hg, hgv, hR => by
       simp only [FStmt.fits, Bool.and_eq_true, decide_eq_true_eq] at hf
@@ -1106,10 +1106,10 @@ theorem compileStmt_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWid
       refine ⟨?_, f1.trans (a4.trans d2.succ)⟩
       cases b
       · simpa using d1
-      · simp only [FStmt.exec, if_true, Bool.true_and] at d1 ⊢
+      · simp only [FStmt.exec, ite_true, Bool.true_and] at d1 ⊢
         rcases hx : FStmt.execArms Γ ((σ.bufs t).getD 0 0).toNat arms σ with _ | σ' <;>
           simp only [hx, Option.isNone_none, Option.isNone_some, Option.getD_none,
-            Option.getD_some, if_true, if_false, Bool.false_eq_true] at d1 ⊢ <;> exact d1
+            Option.getD_some, ite_true, ite_false, Bool.false_eq_true] at d1 ⊢ <;> exact d1
   | .forLit .., _, _, _, _, _, hf, _, _, _ => by simp [FStmt.fits] at hf
   | .forLen .., _, _, _, _, _, hf, _, _, _ => by simp [FStmt.fits] at hf
 
@@ -1182,7 +1182,7 @@ theorem compileProg_correct {L : Layout} (hL : LayoutOK L) (p : FProg) (hf : p.f
     rw [evalA_mov]; simp [upd, opv]
   obtain ⟨r1, -⟩ := compileStmt_correct hL p.widths p.body 0 (.gThen 0) σ _ true hf.1
     (by simp [RegName.guardAt]) hg0 hR0
-  simp only [if_true] at r1
+  simp only [ite_true] at r1
   obtain ⟨e1, -⟩ := compileExpr_correct hL p.widths p.result 0 _ hf.2 r1
   rw [e1]
   simp [FProg.run]

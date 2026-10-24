@@ -284,7 +284,7 @@ theorem lenGuard_spec {L : Layout} (hL : LayoutOK L) {k : Nat} {g : RegName}
     have hc : decide (BitVec.ofNat 64 j < BitVec.ofNat 64 n) = decide (j < n) := by
       apply decide_eq_decide.mpr
       rw [lt_ofNat_iff _ _ hn, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hj]
-    simp only [reduceCtorEq, if_false, if_true, hlen, hc, hg1, hgv]
+    simp only [reduceCtorEq, ite_false, ite_true, hlen, hc, hg1, hgv]
     by_cases h : j < n <;> cases b <;> simp [h, hg0]
   · intro r hr h1
     simp [tR, upd, hL.eq_iff, hr, h1]
@@ -368,14 +368,14 @@ theorem unrollLen_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWidth
       · by_cases hlt : m < (σ.bufs t).length
         · have e1 : min m (σ.bufs t).length = m := Nat.min_eq_left hlt.le
           have e2 : min (m + 1) (σ.bufs t).length = m + 1 := Nat.min_eq_left hlt
-          simp only [e1, if_true] at r4
-          simp only [e2, if_true, List.range_succ, List.foldl_append, List.foldl_cons,
+          simp only [e1, ite_true] at r4
+          simp only [e2, ite_true, List.range_succ, List.foldl_append, List.foldl_cons,
             List.foldl_nil]
           simpa [hlt] using r4
         · have e1 : min m (σ.bufs t).length = (σ.bufs t).length := by omega
           have e2 : min (m + 1) (σ.bufs t).length = (σ.bufs t).length := by omega
-          simp only [e1, if_true] at r4
-          simp only [e2, if_true]
+          simp only [e1, ite_true] at r4
+          simp only [e2, ite_true]
           simpa [hlt] using r4
 
 /-! ## Correctness of the statement compiler with loops -/
@@ -444,12 +444,12 @@ theorem compileStmtL_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWi
         · have e1 : (true && (c.eval Γ σ != 0)) = false := by simp [hc]
           have e2 : (true && (c.eval Γ σ == 0)) = true := by simp [hc]
           rw [e1, e2] at r4
-          simp only [FStmt.exec, if_pos hc, if_true]
+          simp only [FStmt.exec, ite_eq_left hc, ite_true]
           simpa using r4
         · have e1 : (true && (c.eval Γ σ != 0)) = true := by simp; exact hc
           have e2 : (true && (c.eval Γ σ == 0)) = false := by simp; exact hc
           rw [e1, e2] at r4
-          simp only [FStmt.exec, if_neg hc, if_true]
+          simp only [FStmt.exec, ite_eq_right hc, ite_true]
           simpa using r4
   | .matchTag t arms dflt, k, g, σ, s, b, hf, hg, hgv, hR, hC => by
       simp only [FStmt.fitsL, Bool.and_eq_true, decide_eq_true_eq] at hf
@@ -477,10 +477,10 @@ theorem compileStmtL_correct {L : Layout} (hL : LayoutOK L) (Γ : String → FWi
       refine ⟨?_, f1.trans (a4.trans d2.succ)⟩
       cases b
       · simpa using d1
-      · simp only [FStmt.exec, if_true, Bool.true_and] at d1 ⊢
+      · simp only [FStmt.exec, ite_true, Bool.true_and] at d1 ⊢
         rcases hx : FStmt.execArms Γ ((σ.bufs t).getD 0 0).toNat arms σ with _ | σ' <;>
           simp only [hx, Option.isNone_none, Option.isNone_some, Option.getD_none,
-            Option.getD_some, if_true, if_false, Bool.false_eq_true] at d1 ⊢ <;> exact d1
+            Option.getD_some, ite_true, ite_false, Bool.false_eq_true] at d1 ⊢ <;> exact d1
   | .forLit i n body, k, g, σ, s, b, hf, hg, hgv, hR, hC => by
       simp only [FStmt.fitsL] at hf
       simp only [compileStmtL]
@@ -572,7 +572,7 @@ theorem compileProgL_correct {L : Layout} (hL : LayoutOK L) (cap : String → Na
     rw [evalA_mov]; simp [upd, opv]
   obtain ⟨r1, -⟩ := compileStmtL_correct hL p.widths cap p.body 0 (.gThen 0) σ _ true hf.1
     (by simp [RegName.guardAt]) hg0 hR0 hC
-  simp only [if_true] at r1
+  simp only [ite_true] at r1
   obtain ⟨e1, -⟩ := compileExpr_correct hL p.widths p.result 0 _ hf.2 r1
   rw [e1]
   simp [FProg.run]

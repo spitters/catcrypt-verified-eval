@@ -420,20 +420,20 @@ theorem compileExpr_names (Γ : String → FWidth) :
       simp only [FExpr.rolesOK] at h
       simp only [compileExpr]
       by_cases hc : op.isCompare = true
-      · simp only [hc, if_true, Bool.and_eq_true] at h ⊢
+      · simp only [hc, ite_true, Bool.and_eq_true] at h ⊢
         obtain ⟨⟨⟨⟨ha, hb⟩, h0⟩, h1⟩, h2⟩ := h
         exact namesIn_append.mpr ⟨namesIn_append.mpr ⟨compileExpr_names Γ a d ha,
           compileExpr_names Γ b (d + 1) hb⟩, cmpCode_names op d h0 h1 h2⟩
-      · simp only [hc, Bool.false_eq_true, if_false] at h ⊢
+      · simp only [hc, Bool.false_eq_true, ite_false] at h ⊢
         by_cases hs : op.isShift = true
-        · simp only [hs, if_true, Bool.and_eq_true] at h ⊢
+        · simp only [hs, ite_true, Bool.and_eq_true] at h ⊢
           obtain ⟨⟨ha, h0⟩, h1⟩ := h
           split
           · refine namesIn_append.mpr ⟨namesIn_append.mpr ⟨compileExpr_names Γ a d ha, ?_⟩,
               maskCode_names _ d h0 h1⟩
             exact arithInstr_names op _ _ (nm_of h0) (fun n hn => by cases hn)
           · exact namesIn_nil
-        · simp only [hs, Bool.false_eq_true, if_false, Bool.and_eq_true] at h ⊢
+        · simp only [hs, Bool.false_eq_true, ite_false, Bool.and_eq_true] at h ⊢
           obtain ⟨⟨⟨ha, hb⟩, h0⟩, h1⟩ := h
           refine namesIn_append.mpr ⟨namesIn_append.mpr ⟨namesIn_append.mpr
             ⟨compileExpr_names Γ a d ha, compileExpr_names Γ b (d + 1) hb⟩, ?_⟩,
@@ -752,7 +752,7 @@ theorem cellAt_cellNo {t : String} {i : Nat} (ht : t ∈ L.spans)
     rw [hsub, Nat.add_mul_div_right _ _ hB, Nat.div_eq_of_lt (by omega), Nat.zero_add]
   have hj : (cellNo L t i - arenaCell - 1) % spanStride = i := by
     rw [hsub, Nat.add_mul_mod_self_right, Nat.mod_eq_of_lt (by omega)]
-  simp only [cellAt, show ¬ cellNo L t i ≤ arenaCell by simp only [cellNo]; omega, if_false, hk,
+  simp only [cellAt, show ¬ cellNo L t i ≤ arenaCell by simp only [cellNo]; omega, ite_false, hk,
     List.getElem?_idxOf ht, hj, List.getElem?_eq_getElem hi]
 
 theorem initMem_of_cellAt {a : BitVec 64} {v : BitVec 64} (h : cellAt L σ (a.toNat / 8) = some v) :

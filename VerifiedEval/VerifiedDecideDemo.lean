@@ -215,8 +215,8 @@ theorem infix_iff_index {α : Type} (H N : List α) :
       apply List.ext_getElem?
       intro j
       by_cases hj : j < N.length
-      · rw [List.getElem?_take, if_pos hj, List.getElem?_drop, hN j hj]
-      · rw [List.getElem?_take, if_neg hj, List.getElem?_eq_none (by omega)]
+      · rw [List.getElem?_take, ite_eq_left hj, List.getElem?_drop, hN j hj]
+      · rw [List.getElem?_take, ite_eq_right hj, List.getElem?_eq_none (by omega)]
     refine ⟨H.take I, H.drop (I + N.length), ?_⟩
     conv_lhs => rw [← List.take_append_drop I H, ← List.take_append_drop N.length (H.drop I)]
     rw [hN', List.drop_drop, List.append_assoc]

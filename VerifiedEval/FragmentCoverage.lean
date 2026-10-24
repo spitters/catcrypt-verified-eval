@@ -219,24 +219,24 @@ theorem compileExpr_fragOK (hA : AllocOK L alloc) (Γ : String → FWidth) :
       simp only [FExpr.litsFit, Bool.and_eq_true] at hl
       by_cases hc : op.isCompare = true
       · have hs := FBinop.isShift_of_isCompare hc
-        simp only [FExpr.fits, hs, Bool.false_eq_true, if_false, Bool.and_eq_true] at hf
-        simp only [compileExpr, hc, if_true, List.forall_mem_append]
+        simp only [FExpr.fits, hs, Bool.false_eq_true, ite_false, Bool.and_eq_true] at hf
+        simp only [compileExpr, hc, ite_true, List.forall_mem_append]
         exact ⟨⟨compileExpr_fragOK hA Γ a d hf.1 hl.1,
           compileExpr_fragOK hA Γ b (d + 1) hf.2 hl.2⟩, cmpCode_fragOK op d⟩
       · simp only [Bool.not_eq_true] at hc
         by_cases hs : op.isShift = true
         · cases b with
           | lit n =>
-            simp only [FExpr.fits, hs, if_true, Bool.and_eq_true, decide_eq_true_eq] at hf
-            simp only [compileExpr, hc, hs, Bool.false_eq_true, if_false, if_true,
+            simp only [FExpr.fits, hs, ite_true, Bool.and_eq_true, decide_eq_true_eq] at hf
+            simp only [compileExpr, hc, hs, Bool.false_eq_true, ite_false, ite_true,
               List.forall_mem_append, List.forall_mem_cons, List.not_mem_nil, false_imp_iff,
               implies_true, and_true]
             exact ⟨⟨compileExpr_fragOK hA Γ a d hf.2 hl.1,
               fragOK_shift_imm alloc op hs _ n hf.1⟩, maskCode_fragOK _ d⟩
           | _ => simp [FExpr.fits, hs] at hf
         · simp only [Bool.not_eq_true] at hs
-          simp only [FExpr.fits, hs, Bool.false_eq_true, if_false, Bool.and_eq_true] at hf
-          simp only [compileExpr, hc, hs, Bool.false_eq_true, if_false,
+          simp only [FExpr.fits, hs, Bool.false_eq_true, ite_false, Bool.and_eq_true] at hf
+          simp only [compileExpr, hc, hs, Bool.false_eq_true, ite_false,
             List.forall_mem_append, List.forall_mem_cons, List.not_mem_nil, false_imp_iff,
             implies_true, and_true]
           exact ⟨⟨⟨compileExpr_fragOK hA Γ a d hf.1 hl.1,

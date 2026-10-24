@@ -99,7 +99,7 @@ theorem decodeWord_encodeWord (w : Nat) (x : BitVec (8 * w)) (rest : Bytes) :
   have hl : (encodeWord w x).length = w := encodeWord_length w x
   have h1 : w ≤ (encodeWord w x ++ rest).length := by simp [hl]
   have h2 : (encodeWord w x ++ rest).take w = encodeWord w x := List.take_left' hl
-  rw [decodeWord, if_pos h1, h2, encodeWord, bytesToNat_natToBytes, Option.some.injEq]
+  rw [decodeWord, ite_eq_left h1, h2, encodeWord, bytesToNat_natToBytes, Option.some.injEq]
   apply BitVec.eq_of_toNat_eq
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt x.isLt, Nat.mod_eq_of_lt x.isLt]
 
@@ -372,7 +372,7 @@ theorem decodeSpan_encodeSpan (cap : Nat) (l : List α) (h : l.length ≤ cap) (
       (encodeCells l ++ List.replicate ((cap - l.length) * ArenaEncode.size α) 0) 0
     rw [Nat.add_zero, List.drop_zero] at hd0
     rw [encodeSpan, List.append_assoc, hd0]
-  rw [decodeSpan, spanLen_encodeSpan cap l h hlen, Option.bind_some, if_pos h, hd,
+  rw [decodeSpan, spanLen_encodeSpan cap l h hlen, Option.bind_some, ite_eq_left h, hd,
     decodeCells_encodeCells]
 
 theorem encodeSpan_injective (cap : Nat) {l₁ l₂ : List α} (h₁ : l₁.length ≤ cap)
@@ -388,10 +388,10 @@ theorem spanGet_encodeSpan (cap : Nat) (l : List α) (h : l.length ≤ cap)
   rw [spanGet, spanLen_encodeSpan cap l h hlen]
   dsimp only
   by_cases hi : i < l.length
-  · rw [if_pos hi, encodeSpan, List.append_assoc, drop_spanHeader_add,
+  · rw [ite_eq_left hi, encodeSpan, List.append_assoc, drop_spanHeader_add,
       drop_encodeCells l _ i (Nat.le_of_lt hi), List.drop_eq_getElem_cons hi, encodeCells,
       List.append_assoc, decode_encode, List.getElem?_eq_getElem hi]
-  · rw [if_neg hi, List.getElem?_eq_none (Nat.le_of_not_lt hi)]
+  · rw [ite_eq_right hi, List.getElem?_eq_none (Nat.le_of_not_lt hi)]
 
 /-- `spanSet` on an encoded span encodes the updated list. -/
 theorem spanSet_encodeSpan (cap : Nat) (l : List α) (h : l.length ≤ cap)
@@ -401,12 +401,12 @@ theorem spanSet_encodeSpan (cap : Nat) (l : List α) (h : l.length ≤ cap)
   rw [spanSet, spanLen_encodeSpan cap l h hlen]
   dsimp only
   by_cases hi : i < l.length
-  · rw [if_pos hi]
+  · rw [ite_eq_left hi]
     have hT := encodeCells_set l (List.replicate ((cap - l.length) * ArenaEncode.size α) 0) i a hi
     simp only [encodeSpan, List.append_assoc, List.length_set]
     rw [take_spanHeader_add, drop_spanHeader_add, ← hT]
     simp only [List.append_assoc]
-  · rw [if_neg hi]
+  · rw [ite_eq_right hi]
     simp only [encodeSpan, List.set_eq_of_length_le (Nat.le_of_not_lt hi)]
 
 theorem spanLen_spanSet (cap : Nat) (l : List α) (h : l.length ≤ cap)

@@ -256,7 +256,7 @@ theorem regionByte_spanRegions (σ : FState) :
       rw [show spanStride = 4294967296 from rfl] at ht ih ⊢
       by_cases hin : 8 * (arenaCell + k * 4294967296 + 1) ≤ n ∧
           n < 8 * (arenaCell + k * 4294967296 + 1) + 8 * (σ.bufs t).length
-      · rw [if_pos hin, if_neg (by omega)]
+      · rw [ite_eq_left hin, ite_eq_right (by omega)]
         have hq1 : (n / 8 - arenaCell - 1) / 4294967296 = k := by omega
         have hq2 : (n / 8 - arenaCell - 1) % 4294967296 =
             n / 8 - arenaCell - 1 - k * 4294967296 := by omega
@@ -266,19 +266,19 @@ theorem regionByte_spanRegions (σ : FState) :
         rw [hq1, Nat.sub_self, List.getElem?_cons_zero, Option.bind_some, hq2,
           List.getElem?_eq_getElem hi, cellByteOf, hn,
           flatMap_wordBytes_getD _ hi (Nat.mod_lt _ (by decide))]
-      · rw [if_neg hin, ih]
+      · rw [ite_eq_right hin, ih]
         by_cases h1 : n / 8 < arenaCell + 1 + k * 4294967296
-        · rw [if_pos h1, if_pos (Nat.lt_of_lt_of_le h1
+        · rw [ite_eq_left h1, ite_eq_left (Nat.lt_of_lt_of_le h1
             (Nat.add_le_add_left (Nat.mul_le_mul_right _ (Nat.le_succ k)) _))]
-        · rw [if_neg h1]
+        · rw [ite_eq_right h1]
           by_cases h2 : n / 8 < arenaCell + 1 + (k + 1) * 4294967296
-          · rw [if_pos h2]
+          · rw [ite_eq_left h2]
             have hq1 : (n / 8 - arenaCell - 1) / 4294967296 = k := by omega
             have hq2 : (σ.bufs t).length ≤ (n / 8 - arenaCell - 1) % 4294967296 := by omega
             rw [hq1, Nat.sub_self, List.getElem?_cons_zero, Option.bind_some,
               List.getElem?_eq_none hq2]
             rfl
-          · rw [if_neg h2, show (n / 8 - arenaCell - 1) / 4294967296 - k =
+          · rw [ite_eq_right h2, show (n / 8 - arenaCell - 1) / 4294967296 - k =
               ((n / 8 - arenaCell - 1) / 4294967296 - (k + 1)) + 1 by omega,
               List.getElem?_cons_succ]
 
@@ -297,7 +297,7 @@ theorem regionByte_regionsOf (hlen : ∀ t ∈ L.spans, (σ.bufs t).length < spa
   simp only [regionsOf, regionByte, wordBytes_length]
   split
   · rename_i hin
-    rw [if_pos (by omega)]
+    rw [ite_eq_left (by omega)]
     simp only [wordBytes, List.getD_eq_getElem?_getD, List.getElem?_map]
     rw [List.getElem?_range (by omega)]
     simp
@@ -310,7 +310,7 @@ theorem write64_zero_cell (v a : BitVec 64) :
   have hs : (a - BitVec.ofNat 64 (8 * (a.toNat / 8))).toNat = a.toNat % 8 := by
     rw [BitVec.toNat_sub, toNat_ofNat_of_lt (by omega)]
     omega
-  simp only [write64, InRange8, hs, if_pos (Nat.mod_lt _ (by decide : 8 > 0))]
+  simp only [write64, InRange8, hs, ite_eq_left (Nat.mod_lt _ (by decide : 8 > 0))]
   apply BitVec.eq_of_toNat_eq
   simp
 
@@ -321,8 +321,8 @@ theorem initMem_eq (a : BitVec 64) :
           fun t => (σ.bufs t)[(a.toNat / 8 - arenaCell - 1) % spanStride]?) (a.toNat % 8)) := by
   unfold initMem cellAt
   by_cases h : a.toNat / 8 ≤ arenaCell
-  · rw [if_pos h, if_pos (by omega)]; rfl
-  · rw [if_neg h, if_neg (by omega)]
+  · rw [ite_eq_left h, ite_eq_left (by omega)]; rfl
+  · rw [ite_eq_right h, ite_eq_right (by omega)]
     cases hs : L.spans[(a.toNat / 8 - arenaCell - 1) / spanStride]? with
     | none => rfl
     | some t =>
