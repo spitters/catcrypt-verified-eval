@@ -30,7 +30,7 @@ The chain has four links.
    (`isSubstr_of_machineAccepts`).
 
 `verified_decide substrDecide` evaluates the one Boolean `machineAccepts` term of link 4 on a
-concrete input and asserts the answer through `Lean.ofReduceBool`.
+concrete input and asserts the answer by an auxiliary axiom `machineAccepts … = true`.
 
 ## Main results
 

@@ -34,7 +34,7 @@ namespace VerifiedEval
 /-! ## Decided instances
 
 The axiom list of `substr_hello_hw` is pinned as a static check that `verified_decide_hw`
-contributes `Lean.ofReduceBool` and `Lean.trustCompiler` only. The false instance is pinned
+contributes one auxiliary axiom only. The false instance is pinned
 as a static check of the tactic's failure message. -/
 
 theorem substr_hello_hw : IsSubstr ("hello world", "lo w") := by
@@ -43,9 +43,8 @@ theorem substr_hello_hw : IsSubstr ("hello world", "lo w") := by
 /--
 info: 'VerifiedEval.substr_hello_hw' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ substr_hello_hw._native.verified_decide.ax_1_1]
 -/
 #guard_msgs in
 #print axioms substr_hello_hw

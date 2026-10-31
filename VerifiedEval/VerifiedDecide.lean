@@ -7,6 +7,7 @@ module
 
 public import VerifiedEval.FragmentCoverageLoop
 public import Lean
+public import Lean.Meta.Native
 
 /-!
 # Deciding a proposition by running the compiled fragment on the machine model
@@ -22,8 +23,10 @@ the answer `machineAccepts` gives on those bytes and the initial machine state o
 `runBlockA` and tests one register. It takes no program and no decision procedure: a
 procedure enters only through its bytes and its initial state. The tactic `verified_decide d`
 closes `P x` for a concrete `x` by evaluating one application of `machineAccepts` with the
-compiler and asserting the result through `Lean.ofReduceBool`, so the trusted evaluation is
-the evaluation of the machine model on data.
+compiler and asserting the result by an auxiliary axiom `machineAccepts … = true`, as
+`native_decide` does, so the trusted evaluation is the evaluation of the machine model on data.
+The machine-evaluation rule of the lean4lean checker does not recognise this axiom and accepts
+it as stated; `verified_decide_lit` produces the axiom that rule confirms.
 
 ## Initial state
 
@@ -92,7 +95,7 @@ open CatCrypt.Crypto.Optimizer.SpillingRegAlloc (writtenNames readNames)
 /-- The machine model's answer on a byte stream: decode `n` instructions with
 `decodeJStream6`, run them with `runBlockA` from `init`, and test register `res` of the final
 state for a nonzero value; `false` when decoding fails. `verified_decide` evaluates
-`Lean.ofReduceBool` on applications of this function only. -/
+applications of this function only and asserts each answer by an auxiliary axiom. -/
 def machineAccepts (bytes : List (BitVec 8)) (n : Nat) (init : AState) (res : String) : Bool :=
   match decodeJStream6 n bytes with
   | some blk => (runBlockA init blk).regs res != 0
@@ -911,10 +914,10 @@ theorem verifiedDecide_sound {α : Type} {P : α → Prop} (d : DecisionProc α 
 
 open Lean Meta Elab Tactic in
 /-- Close a goal `head a₁ … aₖ = true` with closed arguments, where `head` of arity `k` is
-`machineAccepts` of arity `4` by default: add the auxiliary definition
-`aux := head a₁ … aₖ`, compile and evaluate it, and on `true` assign
-`Lean.ofReduceBool aux true rfl`. Fails with the machine's answer when the evaluation
-returns `false`. -/
+`machineAccepts` of arity `4` by default: compile and evaluate `head a₁ … aₖ` by
+`Lean.Meta.nativeEqTrue`, which on `true` adds the auxiliary axiom
+`head a₁ … aₖ = true` and returns it as the proof. Fails with the machine's answer when the
+evaluation returns `false`. -/
 meta def evalMachineAccepts (g : MVarId) (head : Name := ``machineAccepts) (arity : Nat := 4) :
     TacticM Unit := g.withContext do
   let ty ← instantiateMVars (← g.getType)
@@ -924,27 +927,12 @@ meta def evalMachineAccepts (g : MVarId) (head : Name := ``machineAccepts) (arit
     throwError "verified_decide: the goal is not `{head} … = true`{indentExpr ty}"
   if lhs.hasFVar || lhs.hasMVar then
     throwError "verified_decide: the machine run has free variables or metavariables{indentExpr lhs}"
-  let auxName ← Term.mkAuxName `_verified_decide
-  let decl := Declaration.defnDecl {
-    name := auxName
-    levelParams := []
-    type := mkConst ``Bool
-    value := lhs
-    hints := .abbrev
-    safety := .safe }
-  modifyEnv (markMeta · auxName)
-  withOptions (fun o => ((o.setBool `Elab.async false).setBool `compiler.postponeCompile false
-      ).setBool `compiler.relaxedMetaCheck true) do
-    addAndCompile decl
-  let r ← unsafe evalConst Bool auxName
-  unless r do
-    throwError "verified_decide: the machine returned false on{indentExpr lhs}"
-  let prf := mkApp3 (mkConst ``Lean.ofReduceBool) (mkConst auxName) (mkConst ``Bool.true)
-    (mkApp2 (mkConst ``Eq.refl [1]) (mkConst ``Bool) (mkConst ``Bool.true))
-  g.assign prf
+  match ← nativeEqTrue `verified_decide lhs with
+  | .notTrue => throwError "verified_decide: the machine returned false on{indentExpr lhs}"
+  | .success prf => g.assign prf
 
 /-- `machine_accepts` closes `machineAccepts bytes n init res = true` for closed arguments by
-evaluating the machine model and asserting the result through `Lean.ofReduceBool`. -/
+evaluating the machine model and asserting the result by an auxiliary axiom. -/
 syntax (name := machineAcceptsTac) "machine_accepts" : tactic
 
 open Lean Elab Tactic in

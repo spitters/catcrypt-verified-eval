@@ -20,9 +20,10 @@ the sink cell and the cells of every span of the layout at their addresses in th
 map of `VerifiedDecide`, and reads back whether the result register is nonzero.
 
 The tactic `verified_decide_hw d` closes `P x` as `verified_decide d` does, except that the
-auxiliary definition asserted through `Lean.ofReduceBool` is an application of
-`machineAcceptsHW`. The trusted evaluation is then the host processor's execution of the
-bytes, in place of the evaluation of the machine model.
+auxiliary axiom it adds is `machineAcceptsHW … = true`. The trusted evaluation is then the
+host processor's execution of the bytes, in place of the evaluation of the machine model.
+The machine-evaluation rule of the lean4lean checker does not recognise this axiom and
+accepts it as stated; `verified_decide_lit` produces the axiom that rule confirms.
 
 ## The runner
 
@@ -160,8 +161,8 @@ theorem verifiedDecideHW_sound {α : Type} {P : α → Prop} (d : DecisionProc �
 /-! ## The tactic -/
 
 /-- `machine_accepts_hw` closes `machineAcceptsHW L plan σ bytes n res = true` for closed
-arguments by running the bytes on the host processor and asserting the result through
-`Lean.ofReduceBool`. -/
+arguments by running the bytes on the host processor and asserting the result by an
+auxiliary axiom. -/
 syntax (name := machineAcceptsHWTac) "machine_accepts_hw" : tactic
 
 open Lean Elab Tactic in

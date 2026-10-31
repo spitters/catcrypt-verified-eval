@@ -4,9 +4,9 @@ A closed decidable proposition `P x` is proved in Lean in one of two ways. Kerne
 (`decide`, `decide +kernel`, `rfl`) trusts only the kernel, but it gets stuck on definitions
 by well-founded recursion and on bodies that a `module` file does not expose, and on data of
 realistic size it takes seconds to minutes. `native_decide` evaluates the decision procedure
-with code produced by Lean's compiler and asserts the result through the axiom
-`Lean.ofReduceBool`; the trusted base then includes the whole code generator and every
-definition the evaluation reaches.
+with code produced by Lean's compiler and asserts the result by an auxiliary axiom
+`e = true` (`Lean.Meta.nativeEqTrue`, since Lean v4.35.0); the trusted base then includes the
+whole code generator and every definition the evaluation reaches.
 
 This package replaces the second option by a chain whose only evaluated function is a fixed
 x86 machine model. The decision procedure is compiled to x86-64 bytes by a compiler proved
@@ -101,7 +101,8 @@ The checker is the Lean kernel in each case.
 
 `verified_decide d` closes `P x` for a concrete `x` by evaluating one application of
 `machineAccepts` to the procedure's bytes, its code length and its initial state, and
-asserting the result through `Lean.ofReduceBool`. On a false instance it fails with the
+asserting the result by an auxiliary axiom `machineAccepts … = true`, added by
+`Lean.Meta.nativeEqTrue` as for `native_decide`. On a false instance it fails with the
 message `verified_decide: the machine returned false on` followed by the evaluated term.
 
 Lean's code generator evaluates the whole asserted term: the compiler `compileProgL`, the
@@ -121,7 +122,8 @@ the code, the sixteen initial registers, the sink cell and every span cell into 
 format of the runner, which runs the bytes on the host processor and prints whether the
 result register is nonzero. The implementation answers `false` without running when the
 bytes do not decode or the runner fails. `verifiedDecideHW_sound` is the soundness theorem
-and `verified_decide_hw d` the tactic.
+and `verified_decide_hw d` the tactic. It adds the auxiliary axiom
+`machineAcceptsHW … = true`.
 
 The trusted evaluation is the host's execution of the bytes: the serialiser `vrunInput`
 under Lean's compiler, the runner, the processor, and the agreement of the processor's
@@ -138,8 +140,9 @@ state `stateOfLit regs regions`, and `machineAcceptsNatD` adds a proof argument 
 literal state to `initState`. A `DecisionProcLit` carries the literal code (in chunks of 16
 bytes, produced by `nat_chunks%`), the instruction count and the result register with
 equations proved by `decide +kernel`, and `verifiedDecideLit_sound` is the soundness
-theorem. The tactic `verified_decide_lit` asserts, through `Lean.ofReduceBool`, one
-application of `machineAcceptsNatD` to five raw literals and the decoding proof, and the
+theorem. The tactic `verified_decide_lit` adds the auxiliary axiom
+`machineAcceptsNatD r₁ r₂ h r₄ r₅ r₆ = true`, one application of `machineAcceptsNatD` to five
+raw literals and the decoding proof, and the
 compiled implementation runs the bytes through the same runner as `verified_decide_hw`. The
 five data arguments of the asserted term are built from natural-number literals,
 `List.cons`, `List.nil` and `Prod.mk` only, so they are read without unfolding any
@@ -147,10 +150,18 @@ definition.
 
 ### Axioms and trusted bases
 
-A proof by one of the three tactics depends on the axioms `Lean.ofReduceBool` and
-`Lean.trustCompiler`, in addition to the axioms of the procedure's own proofs. The three
-demos pin, by `#print axioms` under `#guard_msgs`, the axiom list of their decided instance:
-`propext`, `Classical.choice`, `Quot.sound`, `Lean.ofReduceBool` and `Lean.trustCompiler`.
+A proof by one of the three tactics depends on one auxiliary axiom per evaluated run, named
+`<theorem>._native.<tactic>.ax_<k>` and stating that the evaluated term equals `true`, in
+addition to the axioms of the procedure's own proofs. The three demos pin, by
+`#print axioms` under `#guard_msgs`, the axiom list of their decided instance: `propext`,
+`Classical.choice`, `Quot.sound` and the auxiliary axiom.
+
+The lean4lean checker with its machine-evaluation rule (`--machine-eval`) re-checks an
+auxiliary axiom of type `machineAcceptsNatD … = true` on raw literal arguments by running the
+bytes through the runner, and rejects it when the runner does not answer `true`. Only
+`verified_decide_lit` adds axioms of that shape. The axioms of `verified_decide` and
+`verified_decide_hw` (`machineAccepts … = true`, `machineAcceptsHW … = true`) are accepted by
+that checker as stated, like any `native_decide` axiom.
 
 | Route | Evaluation trusted | Fidelity of the x86 model trusted |
 |---|---|---|
@@ -223,9 +234,9 @@ lake build VerifiedEval.VerifiedDecideHWDemo VerifiedEval.VerifiedDecideLitDemo
 anything: `substrDecide_code_eq` and `substrDecide_bytes_eq` identify the procedure's code
 and bytes as the output of `compileProgL` and `encodeJBlock6` on `substrProg`, and
 `isSubstr_of_machineAccepts` instantiates `verifiedDecide_sound`, so that an accepting
-machine run on those bytes proves `IsSubstr` for any admissible pair of strings. The axiom
-`Lean.ofReduceBool` enters only where a tactic asserts a concrete run, as in `substr_hello`,
-which `hello_lo_w` restates.
+machine run on those bytes proves `IsSubstr` for any admissible pair of strings. An auxiliary
+axiom enters only where a tactic asserts a concrete run, as in `substr_hello`, which
+`hello_lo_w` restates.
 
 A new procedure needs a `DecisionProc`: the program (written as an `FProg` or produced by
 `reifyFragment%`), a layout (`stdLayout`), a `RegPlan` that passes `planCheck`, the scope

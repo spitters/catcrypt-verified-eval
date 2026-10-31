@@ -45,9 +45,11 @@ machine-evaluation rule is sound on decodable bytes only; it evaluates applicati
 register number of the compiled procedure, with their equations and the decoding fact
 `decodes`, which `codeDecodes_of_eqs` derives from the equations and the byte round trip. The
 tactic `verified_decide_lit d` closes `P x` by evaluating `regsOf` and `regionsOf` at `x` to
-raw literals, proving each equation by `decide +kernel`, and asserting through
-`Lean.ofReduceBool` an auxiliary definition whose value is one application of
-`machineAcceptsNatD` to five raw literals and the decoding proof `d.decodes`.
+raw literals, proving each equation by `decide +kernel`, and asserting by an auxiliary
+axiom `machineAcceptsNatD r₁ r₂ h r₄ r₅ r₆ = true`, one application of `machineAcceptsNatD`
+to five raw literals and the decoding proof `h`. This is the shape that the machine-evaluation
+rule of the lean4lean checker (`--machine-eval`) confirms by running the bytes; it is the only
+tactic of this package whose axioms that rule checks.
 
 The compiled implementation `machineAcceptsNatImpl` runs the bytes on the host processor
 through the runner of `VerifiedDecideHW`.
@@ -159,8 +161,8 @@ unsafe def machineAcceptsNatDImpl (code : List (List Nat)) (n : Nat)
 machine-evaluation rule evaluates applications of this function only. The argument `h`
 records that the bytes of `code.flatten` decode into `n` instructions, which the rule relies
 on because the processor runs the bytes without decoding them; the kernel has checked `h`,
-since the auxiliary definition containing the application is type-checked before the rule
-fires. Compiled code runs the bytes on the host processor through `machineAcceptsNatImpl`. -/
+since the type of the auxiliary axiom containing the application is type-checked before the
+rule fires. Compiled code runs the bytes on the host processor through `machineAcceptsNatImpl`. -/
 @[implemented_by machineAcceptsNatDImpl]
 def machineAcceptsNatD (code : List (List Nat)) (n : Nat) (_h : codeDecodes code n = true)
     (regs : List Nat) (regions : List (Nat × List Nat)) (res : Nat) : Bool :=
@@ -566,11 +568,11 @@ argument `aᵢ` whose weak head normal form `rᵢ` is raw literal data (a projec
 registered procedure whose field is defined by `nat_lits%`) is related to it by `rfl`; every
 other data argument is evaluated to raw literals `rᵢ` and `aᵢ = rᵢ` is proved by
 `decide +kernel`. The decoding proof `h'` is `h` when `r₁` and `r₂` are the weak head normal
-forms of `a₁` and `a₂`, and `codeDecodes_of_eq e₁ e₂ h` otherwise. Then add the auxiliary
-definition `aux := machineAcceptsNatD r₁ r₂ h' r₄ r₅ r₆`, compile and evaluate it, and on
-`true` close the goal from `Lean.ofReduceBool aux true rfl`, the equations and
-`machineAcceptsNatD_eq`. Fails with the machine's answer when the evaluation returns
-`false`. -/
+forms of `a₁` and `a₂`, and `codeDecodes_of_eq e₁ e₂ h` otherwise. Then compile and
+evaluate `machineAcceptsNatD r₁ r₂ h' r₄ r₅ r₆` by `Lean.Meta.nativeEqTrue`, which on `true`
+adds the auxiliary axiom `machineAcceptsNatD r₁ r₂ h' r₄ r₅ r₆ = true`, and close the goal
+from it, the equations and `machineAcceptsNatD_eq`. Fails with the machine's answer when the
+evaluation returns `false`. -/
 meta def evalMachineAcceptsLit (g : MVarId) : TacticM Unit := g.withContext do
   let ty ← instantiateMVars (← g.getType)
   let some (_, lhs, rhs) := ty.eq?
@@ -611,29 +613,16 @@ meta def evalMachineAcceptsLit (g : MVarId) : TacticM Unit := g.withContext do
       args[5]!])
     (← mkEqTrans heqNat (← mkEqSymm (mkAppN (mkConst ``machineAcceptsNatD_eq)
       #[raws[0]!, raws[1]!, hDec', raws[2]!, raws[3]!, raws[4]!])))
-  let auxName ← Term.mkAuxName `_verified_decide_lit
-  let decl := Declaration.defnDecl {
-    name := auxName
-    levelParams := []
-    type := mkConst ``Bool
-    value := val
-    hints := .abbrev
-    safety := .safe }
-  modifyEnv (markMeta · auxName)
-  withOptions (fun o => ((o.setBool `Elab.async false).setBool `compiler.postponeCompile false
-      ).setBool `compiler.relaxedMetaCheck true) do
-    addAndCompile decl
-  let r ← unsafe evalConst Bool auxName
-  unless r do
-    throwError "verified_decide_lit: the machine returned false on{indentExpr lhs}"
-  let prf := mkApp3 (mkConst ``Lean.ofReduceBool) (mkConst auxName) (mkConst ``Bool.true)
-    (mkApp2 (mkConst ``Eq.refl [1]) (mkConst ``Bool) (mkConst ``Bool.true))
+  let prf ← match ← nativeEqTrue `verified_decide_lit val with
+    | .notTrue =>
+      throwError "verified_decide_lit: the machine returned false on{indentExpr lhs}"
+    | .success prf => pure prf
   g.assign (mkApp6 (mkConst ``Eq.trans [1]) (mkConst ``Bool) lhs val (mkConst ``Bool.true) heq
     prf)
 
 /-- `machine_accepts_lit` closes `machineAcceptsNatD code n h regs regions res = true` for
-closed arguments by reducing the data arguments to raw literals and asserting the machine's answer on those
-literals through `Lean.ofReduceBool`. -/
+closed arguments by reducing the data arguments to raw literals and asserting the machine's
+answer on those literals by an auxiliary axiom. -/
 syntax (name := machineAcceptsLitTac) "machine_accepts_lit" : tactic
 
 open Elab Tactic in

@@ -24,8 +24,8 @@ each character one 64-bit cell holding its byte. The plan holds the four scalars
 `ok`, `f`, the length and cell-0 registers of the two spans, the sink, the depth-0 guard and
 the temporaries 0 to 5 in the sixteen general-purpose registers, `%rsp` holding the guard.
 
-`substr_hello` is closed by `verified_decide substrDecide`. Its axioms are those of
-`Lean.ofReduceBool` and the standard three; the evaluated term is one application of
+`substr_hello` is closed by `verified_decide substrDecide`. Its axioms are one auxiliary
+axiom `machineAccepts … = true` and the standard three; the evaluated term is one application of
 `machineAccepts` to the bytes, the length, the initial state and the result register of
 `substrDecide`.
 
@@ -342,7 +342,7 @@ def substrDecide : DecisionProc (String × String) IsSubstr where
 /-! ## Decided instances
 
 The axiom list of `substr_hello` is pinned as a static check that `verified_decide`
-contributes `Lean.ofReduceBool` and `Lean.trustCompiler` only. The false instance is pinned
+contributes one auxiliary axiom only. The false instance is pinned
 as a static check of the tactic's failure message. -/
 
 theorem substr_hello : IsSubstr ("hello world", "lo w") := by verified_decide substrDecide
@@ -350,9 +350,8 @@ theorem substr_hello : IsSubstr ("hello world", "lo w") := by verified_decide su
 /--
 info: 'VerifiedEval.substr_hello' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ substr_hello._native.verified_decide.ax_1_1]
 -/
 #guard_msgs in
 #print axioms substr_hello

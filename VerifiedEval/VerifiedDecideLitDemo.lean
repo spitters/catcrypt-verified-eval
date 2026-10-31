@@ -83,7 +83,8 @@ def substrDecideLit : DecisionProcLit (String × String) IsSubstr where
 /-! ## Decided instances
 
 The axiom list of `substr_hello_lit` is pinned as a static check that `verified_decide_lit`
-contributes `Lean.ofReduceBool` and `Lean.trustCompiler` only. The false instance is pinned
+contributes one auxiliary axiom only, of the shape `machineAcceptsNatD … = true` that the
+lean4lean machine-evaluation rule confirms. The false instance is pinned
 as a static check of the tactic's failure message. -/
 
 theorem substr_hello_lit : IsSubstr ("hello world", "lo w") := by
@@ -92,9 +93,8 @@ theorem substr_hello_lit : IsSubstr ("hello world", "lo w") := by
 /--
 info: 'VerifiedEval.substr_hello_lit' depends on axioms: [propext,
  Classical.choice,
- Lean.ofReduceBool,
- Lean.trustCompiler,
- Quot.sound]
+ Quot.sound,
+ substr_hello_lit._native.verified_decide_lit.ax_1_2]
 -/
 #guard_msgs in
 #print axioms substr_hello_lit
