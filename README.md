@@ -247,7 +247,7 @@ and is the template; `substrProg` is written directly as an `FProg`, and
 
 ## Building
 
-The package uses Lean `v4.33.1` (`lean-toolchain`) and Mathlib `v4.33.1`. It requires four
+The package uses Lean `v4.35.0` (`lean-toolchain`) and Mathlib `v4.35.0`. It requires four
 packages of the CatCrypt workspace as local path dependencies, checked out next to this
 directory: `catcrypt-compiler`, `CatCrypt-core`, `ParamTransfer` and `hax-lean`. Every
 module is compiled with `-E hasSorry`, so a declaration whose proof reaches `sorryAx` is a
