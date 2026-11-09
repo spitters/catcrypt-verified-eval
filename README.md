@@ -156,7 +156,9 @@ addition to the axioms of the procedure's own proofs. The three demos pin, by
 `#print axioms` under `#guard_msgs`, the axiom list of their decided instance: `propext`,
 `Classical.choice`, `Quot.sound` and the auxiliary axiom.
 
-The lean4lean checker with its machine-evaluation rule (`--machine-eval`) re-checks an
+The [lean4lean](https://github.com/spitters/lean4lean) checker with its
+[machine-evaluation rule](https://github.com/spitters/lean4lean#machine-evaluation)
+(`--machine-eval`, off by default) re-checks an
 auxiliary axiom of type `machineAcceptsNatD … = true` on raw literal arguments by running the
 bytes through the runner, and rejects it when the runner does not answer `true`. Only
 `verified_decide_lit` adds axioms of that shape. The axioms of `verified_decide` and
