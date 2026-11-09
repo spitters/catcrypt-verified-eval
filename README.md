@@ -250,10 +250,9 @@ and is the template; `substrProg` is written directly as an `FProg`, and
 ## Building
 
 The package uses Lean `v4.35.0` (`lean-toolchain`) and Mathlib `v4.35.0`. It requires four
-packages of the CatCrypt workspace as local path dependencies, checked out next to this
-directory: `catcrypt-compiler`, `CatCrypt-core`, `ParamTransfer` and `hax-lean`. Every
-module is compiled with `-E hasSorry`, so a declaration whose proof reaches `sorryAx` is a
-build error.
+CatCrypt packages, `catcrypt-compiler`, `CatCrypt-core`, `ParamTransfer` and `hax-lean`, at
+the revisions pinned in `lakefile.lean`. Every module is compiled with `-E hasSorry`, so a
+declaration whose proof reaches `sorryAx` is a build error.
 
 Inside the CatCrypt workspace the package is a path dependency of the top-level package
 SSProve-lean, and every build runs from that package's root:
@@ -266,7 +265,7 @@ Lake keys the freshness of a module on the whole `LEAN_PATH` of the build, so bu
 same modules alternately from this directory and from the workspace root rebuilds them each
 time; the workspace keeps one build root.
 
-Standalone, with the four sibling packages next to this directory:
+Standalone, Lake fetches the four packages at their pinned revisions:
 
 ```
 lake exe cache get

@@ -34,14 +34,19 @@ package catcryptVerifiedEval where
 lean_lib VerifiedEval where
   globs := #[.andSubmodules `VerifiedEval]
 
--- The sibling packages of the CatCrypt workspace, as local path dependencies. Their
--- own requirements (CompPoly, VeIR and the others of `catcryptCompiler`) are resolved
--- transitively; a requirement stated here takes precedence over a dependency's
--- requirement of the same package.
-require catcryptCompiler from "../catcrypt-compiler"
-require paramTransfer from "../ParamTransfer"
-require catcryptCore from "../CatCrypt-core"
-require «hax-lean» from "../hax-lean"
+-- The CatCrypt packages at the revisions the compiler pins. Their own requirements
+-- (CompPoly, VeIR and the others of `catcryptCompiler`) are resolved transitively; a
+-- requirement stated here takes precedence over a dependency's requirement of the same
+-- package. Inside the CatCrypt workspace the top-level package requires all four as
+-- local paths, and its requirements take precedence over these.
+require catcryptCompiler from git
+  "https://github.com/spitters/catcrypt-compiler.git" @ "44123ebe51a07786db8901f29018937c84630f26"
+require paramTransfer from git
+  "https://github.com/spitters/ParamTransfer.git" @ "40916765d6df5954da9105db764858233cdada86"
+require catcryptCore from git
+  "https://github.com/spitters/CatCrypt-core.git" @ "130e2e7848757df39f0021d57f183b66062ba1ef"
+require «hax-lean» from git
+  "https://github.com/spitters/hax-lean.git" @ "918bdd1985c7669dce192e01521a445752994971"
 
 -- Mathlib last, so that its versions of the shared dependencies (Batteries, Aesop,
 -- ProofWidgets) win on conflicts. The tag is the one every package of the workspace
