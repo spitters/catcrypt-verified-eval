@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # A push to main runs only the gates. The Lean build compiles the part of the
+  # CatCrypt compiler this package imports and takes hours from a cold cache, so it
+  # runs on pull requests and on a dispatch from main.
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Checks that need no Lean toolchain and finish in seconds.
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Relative Markdown links resolve
+        if: ${{ !cancelled() }}
+        run: |
+          rc=0
+          for f in $(git ls-files '*.md'); do
+            d=$(dirname "$f")
+            for t in $(grep -oE '\]\([^)#]+' "$f" | sed 's/^](//' | grep -vE '^[a-z]+:'); do
+              [ -e "$d/$t" ] || { echo "$f: missing link target $t"; rc=1; }
+            done
+          done
+          exit "$rc"
+
+      - name: The runner builds and passes its tests
+        # runner/test.sh compiles runner/vrun.c and runs it on hand-written byte
+        # sequences (register moves, an arena load, a fault on an unmapped address,
+        # the refusal of a region below mmap_min_addr). The runner needs x86-64 Linux,
+        # which ubuntu-latest is.
+        if: ${{ !cancelled() }}
+        run: bash VerifiedEval/runner/test.sh
+
+  build:
+    needs: gates
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # A run that has not finished by here is stuck, not slow.
+    timeout-minutes: 300
+    env:
+      # Bounds the number of concurrent Lean workers and their threads; at 1 a build
+      # runs about three workers, within the runner's 16 GB.
+      LEAN_NUM_THREADS: "1"
+      # The wall-clock budgets of `#kat` checks are set on a development machine; the
+      # runner is slower, so CI multiplies them, and an overrun is an error.
+      CATCRYPT_KAT_MS_SCALE: "4"
+      CATCRYPT_KAT_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # The mathlib cache, the dependency builds and this package's outputs exceed
+      # the runner volume's free space; the preinstalled toolchains the job never
+      # uses free about 25 GB.
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          df -h / | tail -1
+
+      - name: Install elan and the pinned Lean toolchain
+        run: |
+          curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain "$(cat lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve dependencies
+        run: lake update
+
+      - name: Fetch the prebuilt mathlib cache
+        run: lake exe cache get
+
+      # The demos VerifiedDecideHWDemo and VerifiedDecideLitDemo run the runner when
+      # they are elaborated, at the path recorded beside VerifiedDecideHW.lean.
+      - name: Build the runner
+        run: cc -O2 -o VerifiedEval/runner/vrun VerifiedEval/runner/vrun.c
+
+      # A cold build of the dependencies can take longer than one run. The cache keeps
+      # progress across runs: restore the newest entry for this toolchain and
+      # lakefile, save what this run built (also on failure), and let the last step
+      # be the verdict.
+      - name: Restore the build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/build
+            .lake/packages/catcryptCompiler/.lake/build
+            .lake/packages/catcryptCore/.lake/build
+            .lake/packages/hax-lean/.lake/build
+            .lake/packages/paramTransfer/.lake/build
+            .lake/packages/Veir/.lake/build
+            .lake/packages/CompPoly/.lake/build
+            .lake/packages/nominalLean/.lake/build
+          key: lake-build-${{ hashFiles('lean-toolchain', 'lakefile.lean') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-build-${{ hashFiles('lean-toolchain', 'lakefile.lean') }}-
+
+      - name: Build the package
+        # The time bound and the memory guard keep the VM alive for the cache save:
+        # a VM that runs out of memory dies without saving, and every later run would
+        # restart at the same module. An early stop is not a failure here.
+        run: |
+          ( n=0; while sleep 3; do
+              avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
+              dfree=$(df -m --output=avail / | tail -1 | tr -d ' ')
+              n=$((n+1)); [ $((n % 40)) -eq 0 ] && echo "heartbeat: mem=${avail}M disk=${dfree}M"
+              if [ "$avail" -lt 3000 ] || [ "$dfree" -lt 2000 ]; then
+                echo "guard: mem=${avail}M disk=${dfree}M - stopping lean workers to keep the cache save alive"
+                pkill -f 'bin/lean' || true
+              fi
+            done ) &
+          GUARD=$!
+          timeout 200m lake build \
+            || echo "build stopped early (rc=$?); progress is kept by the cache save"
+          kill "$GUARD" 2>/dev/null || true
+
+      - name: Save the build cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .lake/build
+            .lake/packages/catcryptCompiler/.lake/build
+            .lake/packages/catcryptCore/.lake/build
+            .lake/packages/hax-lean/.lake/build
+            .lake/packages/paramTransfer/.lake/build
+            .lake/packages/Veir/.lake/build
+            .lake/packages/CompPoly/.lake/build
+            .lake/packages/nominalLean/.lake/build
+          key: lake-build-${{ hashFiles('lean-toolchain', 'lakefile.lean') }}-${{ github.run_id }}
+
+      - name: The package is complete
+        # Nothing is left to elaborate after the step above. Every module, the demos
+        # included, builds under the package's `-E hasSorry`, and the demos pin the
+        # axiom list of their decided instances with `#guard_msgs`.
+        run: lake build
