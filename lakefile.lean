@@ -52,4 +52,4 @@ require «hax-lean» from git
 -- ProofWidgets) win on conflicts. The tag is the one every package of the workspace
 -- pins (commit 0df444a360eaa60ab8c11dca51a86af692955474).
 require mathlib from git
-  "https://github.com/leanprover-community/mathlib4" @ "v4.35.0"
+  "https://github.com/leanprover-community/mathlib4" @ "v4.36.0"
