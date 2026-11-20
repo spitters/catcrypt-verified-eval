@@ -314,9 +314,9 @@ section Demo
 
 instance : SpanCap 64 := ⟨by decide⟩
 
-instance : Ascii "hello world" := ⟨by unfold IsAscii; decide⟩
+instance : Ascii "hello world" := ⟨by simp [IsAscii]⟩
 
-instance : Ascii "lo w" := ⟨by unfold IsAscii; decide⟩
+instance : Ascii "lo w" := ⟨by simp [IsAscii]⟩
 
 example (o : Option UInt32) : o.isSome = true ↔ tagOf (encode o) = some 1 :=
   StmtTransfer.iff
