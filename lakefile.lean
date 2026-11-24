@@ -40,13 +40,13 @@ lean_lib VerifiedEval where
 -- package. Inside the CatCrypt workspace the top-level package requires all four as
 -- local paths, and its requirements take precedence over these.
 require catcryptCompiler from git
-  "https://github.com/spitters/catcrypt-compiler.git" @ "44123ebe51a07786db8901f29018937c84630f26"
+  "https://github.com/spitters/catcrypt-compiler.git" @ "bf2f07fefc523bddb079d2c9b77a56681d8d747b"
 require paramTransfer from git
-  "https://github.com/spitters/ParamTransfer.git" @ "40916765d6df5954da9105db764858233cdada86"
+  "https://github.com/spitters/ParamTransfer.git" @ "e93ad6b334ec1a785de08b8782a7f7061705de43"
 require catcryptCore from git
-  "https://github.com/spitters/CatCrypt-core.git" @ "130e2e7848757df39f0021d57f183b66062ba1ef"
+  "https://github.com/spitters/CatCrypt-core.git" @ "325a2886524eb9dc8a8fdcda4347878151000619"
 require «hax-lean» from git
-  "https://github.com/spitters/hax-lean.git" @ "918bdd1985c7669dce192e01521a445752994971"
+  "https://github.com/spitters/hax-lean.git" @ "2bdf7c3d7e35ec2354bae06a4a1f61118a652cc8"
 
 -- Mathlib last, so that its versions of the shared dependencies (Batteries, Aesop,
 -- ProofWidgets) win on conflicts. The tag is the one every package of the workspace
