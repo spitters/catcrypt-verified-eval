@@ -34,7 +34,10 @@ The reifier from Lean terms into this grammar is
 
 * `FProg`, `FStmt`, `FExpr`, `FTy`: the fragment grammar.
 * `FragmentGap`: the named rejections.
-* `FProg.wf`: the scoping and typing check.
+* `FProg.wf`: the scoping and typing check. It also rejects an arithmetic or shift operator
+  without width (all its leaves literals, `FExpr.untyped`) whose 64-bit value is not masked
+  afterwards (`FExpr.unmaskedUntyped`): such an operator answers at 64 bits where a source
+  operator of a narrower type would not.
 * `FStmt.exec`, `FProg.run`: the total denotational semantics.
 
 ## Main results
@@ -135,6 +138,12 @@ def FBinop.isCompare : FBinop → Bool
 /-- Whether the operator is a shift, so its right operand is a literal amount. -/
 def FBinop.isShift : FBinop → Bool
   | .shl | .shr => true
+  | _ => false
+
+/-- Whether the operator's result on two words below `2 ^ w` can reach `2 ^ w` and so depends
+on the width at which it wraps: the arithmetic operators and the shifts. -/
+def FBinop.wraps : FBinop → Bool
+  | .add | .sub | .mul | .shl | .shr => true
   | _ => false
 
 /-- Whether the operator is defined on booleans as well as words. -/
@@ -238,6 +247,10 @@ inductive FragmentGap
   | letOfNonScalar (x : String) (ty : String)
   /-- A `match` whose discriminant is not a tagged parameter. -/
   | matchNotOnTagged
+  /-- An arithmetic or shift operator none of whose operands has a width (every leaf of the
+  operand tree a literal): its value would wrap at 64 bits whatever the type of
+  the source term. The reifier folds such an operator at the width of its type. -/
+  | untypedArith (op : FBinop)
   deriving Repr, DecidableEq, Inhabited, BEq
 
 /-- The rejection's text. -/
@@ -268,6 +281,7 @@ def FragmentGap.toString : FragmentGap → String
   | .natOperator op => s!"natOperator {op}: `{op}` on `Nat` is outside the fragment; only `+` and comparisons of `Nat` are in it"
   | .letOfNonScalar x t => s!"letOfNonScalar {x} {t}: `let {x}` binds a value of type `{t}`"
   | .matchNotOnTagged => "matchNotOnTagged: the discriminant is not a tagged parameter"
+  | .untypedArith op => s!"untypedArith {op}: no operand of `{op}` has a width; fold the literals at the width of their type"
 
 instance : ToString FragmentGap := ⟨FragmentGap.toString⟩
 
@@ -314,6 +328,46 @@ def unify : Option FTy → Option FTy → Except FragmentGap (Option FTy)
   | none, t => .ok t
   | t, none => .ok t
   | some a, some b => if a = b then .ok (some a) else .error (.typeMismatch a b)
+
+/-- Whether an expression is an arithmetic combination of literals only: a literal, or a
+non-comparison operator whose operands that carry the width (both, or the shifted operand of a
+shift) are such combinations. Its value has no width (`FExpr.width` is `none`) and wraps at 64
+bits. -/
+def untyped : FExpr → Bool
+  | .lit _ => true
+  | .bin op a b => !op.isCompare && (if op.isShift then untyped a else untyped a && untyped b)
+  | _ => false
+
+/-- Whether an expression is built from literals by `+ - * &&& ||| ^^^` only: its value
+modulo `2 ^ w` is the value of the same operators at width `w`, so the 64-bit value is right
+wherever it is masked at `w`. -/
+def ringTree : FExpr → Bool
+  | .lit _ => true
+  | .bin op a b => (op == .add || op == .sub || op == .mul || op == .and || op == .or ||
+      op == .xor) && ringTree a && ringTree b
+  | _ => false
+
+/-- The first operator of an expression that has no width and whose 64-bit value is not
+masked afterwards (`untyped`): such an operator answers at 64 bits where the source operator
+answers at the width of its type. `masked` says whether the expression's own value is masked
+at its width (the right-hand side of an assignment or a span write, an operand of an
+arithmetic or bitwise operator that has a width); there a `ringTree` is right. -/
+def unmaskedUntyped (masked : Bool) : FExpr → Option FBinop
+  | .bin op a b =>
+      if op.wraps && untyped (.bin op a b) then
+        if masked && ringTree (.bin op a b) then none else some op
+      else if op.isCompare then (unmaskedUntyped false a).or (unmaskedUntyped false b)
+      else if op.isShift then unmaskedUntyped false a
+      else (unmaskedUntyped true a).or (unmaskedUntyped true b)
+  | .not a => unmaskedUntyped false a
+  | .spanGet _ i => unmaskedUntyped false i
+  | _ => none
+
+/-- Reject an expression with an unmasked operator without width (`unmaskedUntyped`). -/
+def checkWidths (masked : Bool) (e : FExpr) : Except FragmentGap Unit :=
+  match unmaskedUntyped masked e with
+  | some op => .error (.untypedArith op)
+  | none => .ok ()
 
 /-- Whether an inferred type is a word or a bare literal. -/
 def isWordish : Option FTy → Bool
@@ -396,8 +450,10 @@ mutual
 def wf (Γ : FEnv) : FStmt → Except FragmentGap Unit
   | .skip => pure ()
   | .seq a b => do wf Γ a; wf Γ b
-  | .assign x e => do check Γ e (← scalarTy Γ x)
+  | .assign x e => do check Γ e (← scalarTy Γ x); checkWidths true e
   | .spanSet s i v => do
+      checkWidths false i
+      checkWidths true v
       let c ← spanCell Γ s
       if !isWordish (← infer Γ i) then throw (.indexNotWord s)
       check Γ v (.word c)
@@ -405,6 +461,7 @@ def wf (Γ : FEnv) : FStmt → Except FragmentGap Unit
       match check Γ c .bool with
       | .ok () => pure ()
       | .error _ => throw .condNotBool
+      checkWidths false c
       wf Γ t
       wf Γ e
   | .forLit i _ body => do
@@ -449,6 +506,7 @@ def FProg.wf (p : FProg) : Except FragmentGap Unit := do
   | .ok () => pure ()
   | .error (.typeMismatch _ a) => throw (.resultNotBool a)
   | .error g => throw g
+  FExpr.checkWidths false p.result
 
 theorem findDup_none_nodup : ∀ l : List String, findDup l = none → l.Nodup
   | [], _ => List.nodup_nil

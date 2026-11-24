@@ -27,11 +27,18 @@ and the `FragmentGap`, never approximated.
   comparisons `< ≤ > ≥ == !=`; on `Nat` only `+` and the comparisons.
 * `Bool` connectives `&& || ! ^^ ==`, `decide` of the comparison propositions,
   `if … then … else` on a boolean or on such a proposition, `cond`.
+* `UInt64.toNat` and `Nat.toUInt64`, the identity on the 64-bit word.
 * `s.size`, `s[i]!`, `s.get!`, `o.isSome`, `o.getD d`, and `match o with
   | some v => … | none => …` on an `Option` parameter.
 * Bounded loops `(List.range n).foldl (fun acc i => …) init` and
   `Nat.fold n (fun i _ acc => …) init` with `n` a literal or `s.size` and a
-  scalar accumulator.
+  scalar accumulator; an inner loop whose initial value is the accumulator itself gets no
+  initial assignment (a `skip`).
+
+A numeral of a word type `UIntN` is reduced modulo `2 ^ N` (the value it denotes), and an
+operator whose operands are both literals is folded at the width of its type (`foldLit`): the
+fragment gives an operator the width of its operands, and an operator on two literals has none,
+so unfolded it would wrap at 64 bits whatever its type.
 
 A conditional, loop or match in expression position is hoisted into a fresh
 local. `reifyFragmentCore` is the `MetaM` entry the tactic layer calls.
@@ -154,6 +161,37 @@ def litValue? (e : Expr) : Option Nat :=
     | (``OfNat.ofNat, #[_, .lit (.natVal n), _]) => some n
     | _ => none
 
+/-- The value of a numeral of a word type, reduced modulo `2 ^ w` for `UInt8` … `UInt64` (a
+numeral `OfNat.ofNat α n` of such a type denotes `n % 2 ^ w`); a `Nat` numeral and a boolean
+keep their value. -/
+def litValueAt? (e : Expr) : Option Nat := do
+  let n ← litValue? e
+  match e.consumeMData.getAppFnArgs with
+  | (``OfNat.ofNat, #[α, _, _]) =>
+      match wordWidth? α with
+      | some w => if α.consumeMData.isConstOf ``Nat then pure n else pure (n % 2 ^ w.bits)
+      | none => pure n
+  | _ => pure n
+
+/-- The value at width `w` of an operator applied to two literals, as the Lean operator of
+the word type of that width computes it; `none` for `Nat` (`natural`) when the operator is not
+`+`, and for the comparisons. Shift amounts are taken modulo the width, as Lean's shifts do. -/
+def foldLit (op : FBinop) (w : FWidth) (natural : Bool) (a b : Nat) : Option Nat :=
+  let m := 2 ^ w.bits
+  if natural then
+    if op == .add then some (a + b) else none
+  else
+    match op with
+    | .add => some ((a + b) % m)
+    | .sub => some ((a % m + (m - b % m)) % m)
+    | .mul => some ((a * b) % m)
+    | .and => some ((a &&& b) % m)
+    | .or => some ((a ||| b) % m)
+    | .xor => some ((a ^^^ b) % m)
+    | .shl => some (((a % m) <<< (b % w.bits)) % m)
+    | .shr => some ((a % m) >>> (b % w.bits))
+    | _ => none
+
 /-- The Lean variable's fragment expression and type, or `unboundVar`. -/
 def lookupVar (x : FVarId) : ReifyM (FExpr × FTy) := do
   match (← read).lookup x with
@@ -208,7 +246,7 @@ mutual
 subterms need. -/
 partial def reifyExpr (e : Expr) : ReifyM (FStmt × FExpr) := do
   let e := e.consumeMData.headBeta
-  if let some n := litValue? e then return (.skip, .lit n)
+  if let some n := litValueAt? e then return (.skip, .lit n)
   match e with
   | .fvar x =>
       match ← lookupVar x with
@@ -247,7 +285,15 @@ partial def reifyBin (op : FBinop) (head : Name) (α a b : Expr) : ReifyM (FStmt
       if op != .add then gapError (.natOperator head.toString)
     let (pa, fa) ← reifyExpr a
     let (pb, fb) ← reifyExpr b
-    pure (.seq pa pb, .bin op fa fb)
+    -- an operator on two literals has no width in the fragment (it would wrap at 64 bits):
+    -- fold it at the width of its type
+    match fa, fb, pa, pb with
+    | .lit x, .lit y, .skip, .skip =>
+        let some w := wordWidth? α | gapError (.unsupportedType (toString (← ppExpr α)))
+        match foldLit op w (α.isConstOf ``Nat) x y with
+        | some v => pure (.skip, .lit v)
+        | none => pure (.seq pa pb, .bin op fa fb)
+    | _, _, _, _ => pure (.seq pa pb, .bin op fa fb)
 
 /-- Reify a shift whose operand type is `α`; the amount must be a literal. -/
 partial def reifyShift (op : FBinop) (head : Name) (α a b : Expr) : ReifyM (FStmt × FExpr) := do
@@ -259,7 +305,12 @@ partial def reifyShift (op : FBinop) (head : Name) (α a b : Expr) : ReifyM (FSt
     | none => gapError .shiftAmountNotLiteral
     | some n =>
       let (pa, fa) ← reifyExpr a
-      pure (pa, .bin op fa (.lit n))
+      match fa, wordWidth? α, pa with
+      | .lit x, some w, .skip =>
+          match foldLit op w false x n with
+          | some v => pure (.skip, .lit v)
+          | none => pure (pa, .bin op fa (.lit n))
+      | _, _, _ => pure (pa, .bin op fa (.lit n))
 
 /-- Reify a boolean connective. -/
 partial def reifyBool2 (op : FBinop) (a b : Expr) : ReifyM (FStmt × FExpr) := do
@@ -291,6 +342,10 @@ partial def reifyApp (c : Name) (args : Array Expr) (e : Expr) : ReifyM (FStmt �
   | ``ByteArray.get!, _ => reifyGet args
   | ``Option.isSome, #[_, o] => do pure (.skip, .bin .eq (.tagOf (← taggedName o)) (.lit 1))
   | ``Option.isNone, #[_, o] => do pure (.skip, .bin .eq (.tagOf (← taggedName o)) (.lit 0))
+  -- `UInt64.toNat` and `Nat.toUInt64` are the identity on the 64-bit word: a `Nat` is held as
+  -- its value modulo `2 ^ 64`
+  | ``UInt64.toNat, #[a] => reifyExpr a
+  | ``Nat.toUInt64, #[a] => reifyExpr a
   | _, _ =>
       let _ := e
       gapError (.unknownHead c.toString)
@@ -361,7 +416,10 @@ partial def reifyLoop (target : String) (β f init bound : Expr)
     | some t => pure t
     | none => gapError (.letOfNonScalar target (toString (← ppExpr β)))
   unless accTy.isScalar do gapError (.letOfNonScalar target (toString (← ppExpr β)))
+  -- an accumulator that starts from its current value (the init is the accumulator itself)
+  -- needs no initial assignment
   let s0 ← reifyStmt target init
+  let s0 := if s0 == .seq .skip (.assign target (.var target)) then .skip else s0
   let mk : String → FStmt → ReifyM FStmt ←
     if let some n := litValue? bound then
       pure fun i body => pure (.forLit i n body)
@@ -444,8 +502,8 @@ end
 
 /-- Reify a Lean function into a fragment program. The function's parameters
 become the program's parameters, its body is reified into statements that leave
-the boolean result in the local `result`. -/
-def reifyFragmentCore (e : Expr) : MetaM FProg := do
+the boolean result in the local `result` (or `resBase`, when given). -/
+def reifyFragmentCore (e : Expr) (resBase : Name := `result) : MetaM FProg := do
   let e ← instantiateMVars e
   let e ← whnf e
   lambdaTelescope e fun xs body => do
@@ -463,7 +521,7 @@ def reifyFragmentCore (e : Expr) : MetaM FProg := do
       | some .bool => pure ()
       | some t => gapError (.resultNotBool t)
       | none => gapError (.unsupportedType (toString (← ppExpr resTy)))
-      let resName ← freshName `result
+      let resName ← freshName resBase
       addLocal resName .bool
       let stmt ← withReader (fun _ => env) (reifyStmt resName body)
       let st ← get
